@@ -1,4 +1,4 @@
-# 🔮 Project Name: [Insert Name Here]
+# 🔮 Project Name: [Accrue]
 
 > **Reclaiming the Time Value of Money for Prediction Markets.**
 > *Don't let your capital sleep while you wait.*
