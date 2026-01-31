@@ -1,0 +1,38 @@
+{
+  "name": "accrue-dapp",
+  "version": "1.0.0",
+  "description": "Unlock liquidity from Polymarket positions with Accrue Protocol",
+  "main": "index.html",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "dev": "npx http-server -p 8000 -o",
+    "deploy": "vercel --prod"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/accrue-dapp.git"
+  },
+  "keywords": [
+    "defi",
+    "polymarket",
+    "prediction-markets",
+    "lending",
+    "polygon",
+    "ethereum",
+    "web3",
+    "dapp"
+  ],
+  "author": "Accrue Protocol Team",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/your-username/accrue-dapp/issues"
+  },
+  "homepage": "https://accrue.xyz",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accrue - 预测·锁仓·收益 | Polymarket 流动性协议</title>
+    <meta name="description" content="Accrue - 释放 Polymarket 仓位的流动性，获取被动收益">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Ethers.js -->
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+    
+    <style>
+        :root {
+            /* Color System */
+            --primary-dark: #0a2342;
+            --primary-mid: #1e5f74;
+            --primary-light: #2d9d8c;
+            --accent-green: #3ecf8e;
+            --accent-teal: #48b8a8;
+            
+            --bg-dark: #050d1a;
+            --bg-card: #0d1b2e;
+            --bg-elevated: #162840;
+            --border-subtle: rgba(62, 207, 142, 0.15);
+            --border-active: rgba(62, 207, 142, 0.4);
+            
+            --text-primary: #e8f4f2;
+            --text-secondary: #8fb3ae;
+            --text-muted: #5a7b7a;
+            
+            --success: #3ecf8e;
+            --warning: #f4a261;
+            --danger: #e76f51;
+            
+            /* Typography */
+            --font-display: 'Orbitron', monospace;
+            --font-mono: 'IBM Plex Mono', monospace;
+            
+            /* Spacing */
+            --spacing-xs: 0.5rem;
+            --spacing-sm: 1rem;
+            --spacing-md: 1.5rem;
+            --spacing-lg: 2rem;
+            --spacing-xl: 3rem;
+            
+            /* Animation */
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: var(--font-mono);
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+            position: relative;
+        }
+        
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(62, 207, 142, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(30, 95, 116, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 40% 80%, rgba(72, 184, 168, 0.06) 0%, transparent 50%);
+            animation: meshFloat 20s ease-in-out infinite;
+            z-index: -1;
+        }
+        
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(62, 207, 142, 0.03) 0px,
+                transparent 1px,
+                transparent 2px,
+                rgba(62, 207, 142, 0.03) 3px
+            );
+            pointer-events: none;
+            z-index: 1;
+            animation: scanlines 8s linear infinite;
+        }
+        
+        @keyframes scanlines {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(50px); }
+        }
+        
+        @keyframes meshFloat {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(5%, 5%) rotate(2deg); }
+            66% { transform: translate(-5%, 3%) rotate(-2deg); }
+        }
+        
+        /* Header */
+        header {
+            padding: var(--spacing-lg) var(--spacing-xl);
+            border-bottom: 1px solid var(--border-subtle);
+            backdrop-filter: blur(20px);
+            background: rgba(5, 13, 26, 0.8);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            animation: slideDown 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-100%); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+        }
+        
+        .logo-text {
+            font-family: var(--font-display);
+            font-size: 2rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-teal));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+        
+        .tagline {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            font-weight: 600;
+        }
+        
+        .wallet-section {
+            display: flex;
+            gap: var(--spacing-sm);
+            align-items: center;
+        }
+        
+        .network-badge {
+            padding: var(--spacing-xs) var(--spacing-sm);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-active);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            color: var(--accent-green);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .network-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--accent-green); }
+            50% { opacity: 0.5; box-shadow: 0 0 20px var(--accent-green); }
+        }
+        
+        .btn {
+            padding: var(--spacing-xs) var(--spacing-md);
+            border-radius: 10px;
+            border: none;
+            font-family: var(--font-mono);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-base);
+            position: relative;
+            overflow: hidden;
+            font-size: 0.875rem;
+            letter-spacing: 0.02em;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-teal));
+            color: var(--bg-dark);
+            box-shadow: 0 4px 20px rgba(62, 207, 142, 0.3);
+        }
+        
+        .btn-primary:hover {
+            box-shadow: 0 6px 30px rgba(62, 207, 142, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border: 1px solid var(--border-active);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--primary-mid);
+            border-color: var(--accent-green);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e76f51, #d64a2d);
+            color: white;
+            box-shadow: 0 4px 20px rgba(231, 111, 81, 0.3);
+        }
+        
+        .btn-danger:hover {
+            box-shadow: 0 6px 30px rgba(231, 111, 81, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Main Container */
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: var(--spacing-xl);
+            animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.2s both;
+        }
+        
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Page Navigation */
+        .page-nav {
+            display: flex;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-xl);
+            padding: var(--spacing-xs);
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border-subtle);
+        }
+        
+        .page-nav-item {
+            flex: 1;
+            padding: var(--spacing-md);
+            background: transparent;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all var(--transition-base);
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-align: center;
+        }
+        
+        .page-nav-item.active {
+            background: linear-gradient(135deg, rgba(62, 207, 142, 0.1), rgba(72, 184, 168, 0.1));
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+            box-shadow: 0 0 20px rgba(62, 207, 142, 0.2);
+        }
+        
+        .page-nav-item:not(.active):hover {
+            background: rgba(62, 207, 142, 0.05);
+            color: var(--text-primary);
+        }
+        
+        .step-num {
+            display: block;
+            font-size: 0.75rem;
+            opacity: 0.6;
+            margin-bottom: 0.25rem;
+        }
+        
+        /* Page Container */
+        .page {
+            display: none;
+            animation: pageSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        @keyframes pageSlideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            position: relative;
+            overflow: hidden;
+            transition: all var(--transition-base);
+        }
+        
+        .card:hover {
+            border-color: var(--border-active);
+            box-shadow: 0 8px 32px rgba(62, 207, 142, 0.1);
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .card-title {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        .card-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+        
+        /* Form Elements */
+        .form-group {
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-xs);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .input-wrapper {
+            position: relative;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: var(--spacing-md);
+            background: var(--bg-elevated);
+            border: 2px solid var(--border-subtle);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: 1.125rem;
+            transition: all var(--transition-base);
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-green);
+            box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.1);
+        }
+        
+        .input-max-btn {
+            position: absolute;
+            right: var(--spacing-sm);
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 0.375rem 0.75rem;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-teal));
+            color: var(--bg-dark);
+            border: none;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+        
+        .input-max-btn:hover {
+            transform: translateY(-50%) scale(1.05);
+        }
+        
+        /* Select Dropdown */
+        .custom-select {
+            position: relative;
+        }
+        
+        .select-button {
+            width: 100%;
+            padding: var(--spacing-md);
+            background: var(--bg-elevated);
+            border: 2px solid var(--border-subtle);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all var(--transition-base);
+        }
+        
+        .select-button:hover {
+            border-color: var(--border-active);
+        }
+        
+        .select-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 0.5rem;
+            background: var(--bg-elevated);
+            border: 2px solid var(--border-active);
+            border-radius: 12px;
+            overflow: hidden;
+            display: none;
+            z-index: 10;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        
+        .select-options.active {
+            display: block;
+            animation: dropDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @keyframes dropDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .select-option {
+            padding: var(--spacing-md);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        
+        .select-option:last-child {
+            border-bottom: none;
+        }
+        
+        .select-option:hover {
+            background: rgba(62, 207, 142, 0.1);
+            color: var(--accent-green);
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        .stat-card {
+            background: var(--bg-elevated);
+            padding: var(--spacing-md);
+            border-radius: 12px;
+            border: 1px solid var(--border-subtle);
+            transition: all var(--transition-base);
+        }
+        
+        .stat-card:hover {
+            border-color: var(--accent-green);
+            transform: translateY(-2px);
+        }
+        
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: var(--font-display);
+        }
+        
+        .stat-change {
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
+        }
+        
+        .stat-change.positive {
+            color: var(--success);
+        }
+        
+        /* Option Cards */
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: var(--spacing-md);
+        }
+        
+        .option-card {
+            background: var(--bg-elevated);
+            border: 2px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: var(--spacing-lg);
+            cursor: pointer;
+            transition: all var(--transition-base);
+        }
+        
+        .option-card.selected {
+            border-color: var(--accent-green);
+            background: linear-gradient(135deg, rgba(62, 207, 142, 0.1), rgba(72, 184, 168, 0.05));
+            box-shadow: 0 0 30px rgba(62, 207, 142, 0.2);
+        }
+        
+        .option-card:hover {
+            border-color: var(--accent-green);
+            transform: translateY(-4px);
+        }
+        
+        .option-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .option-title {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+        
+        .option-badge {
+            padding: 0.25rem 0.75rem;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-teal));
+            color: var(--bg-dark);
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        
+        .option-description {
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-md);
+            font-size: 0.875rem;
+        }
+        
+        .option-features {
+            list-style: none;
+        }
+        
+        .option-features li {
+            padding: 0.5rem 0;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .option-features li::before {
+            content: '✓';
+            color: var(--accent-green);
+            font-weight: bold;
+        }
+        
+        /* Health Factor */
+        .health-factor {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        .health-value {
+            font-size: 3rem;
+            font-family: var(--font-display);
+            font-weight: 900;
+            text-align: center;
+            margin: var(--spacing-md) 0;
+        }
+        
+        .health-value.safe { color: var(--success); }
+        .health-value.warning { color: var(--warning); }
+        .health-value.danger { color: var(--danger); }
+        
+        .health-bar {
+            height: 8px;
+            background: var(--bg-dark);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: var(--spacing-sm);
+        }
+        
+        .health-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-teal));
+            transition: width var(--transition-slow);
+        }
+        
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-lg);
+        }
+        
+        .action-buttons .btn {
+            flex: 1;
+        }
+        
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(5, 13, 26, 0.9);
+            backdrop-filter: blur(10px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal-overlay.active {
+            display: flex;
+        }
+        
+        .modal {
+            background: var(--bg-card);
+            border: 2px solid var(--border-active);
+            border-radius: 24px;
+            padding: var(--spacing-xl);
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: modalSlideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        @keyframes modalSlideUp {
+            from { opacity: 0; transform: translateY(50px) scale(0.9); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        .modal-title {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+        
+        .modal-close:hover {
+            color: var(--text-primary);
+            transform: rotate(90deg);
+        }
+        
+        /* Transaction Status */
+        .tx-status {
+            text-align: center;
+            padding: var(--spacing-lg);
+        }
+        
+        .tx-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid var(--border-subtle);
+            border-top-color: var(--accent-green);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto var(--spacing-md);
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .tx-message {
+            color: var(--text-secondary);
+            margin-top: var(--spacing-sm);
+        }
+        
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: var(--spacing-lg);
+            right: var(--spacing-lg);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-sm);
+        }
+        
+        .toast {
+            background: var(--bg-card);
+            border: 2px solid var(--border-active);
+            border-radius: 12px;
+            padding: var(--spacing-md);
+            min-width: 300px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            animation: toastSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        @keyframes toastSlideIn {
+            from { opacity: 0; transform: translateX(100px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .toast.success { border-color: var(--success); }
+        .toast.error { border-color: var(--danger); }
+        .toast.warning { border-color: var(--warning); }
+        
+        /* Utility Classes */
+        .hidden { display: none !important; }
+        .text-center { text-align: center; }
+        .mt-1 { margin-top: var(--spacing-sm); }
+        .mt-2 { margin-top: var(--spacing-md); }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: var(--spacing-md);
+            }
+            
+            .page-nav {
+                flex-direction: column;
+            }
+            
+            .stats-grid,
+            .options-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-content">
+            <div class="logo-section">
+                <div>
+                    <div class="logo-text">Accrue</div>
+                    <div class="tagline">预测·锁仓·收益</div>
+                </div>
+            </div>
+            
+            <div class="wallet-section">
+                <div class="network-badge">
+                    <span class="network-dot"></span>
+                    <span id="networkName">Polygon Amoy 测试网</span>
+                </div>
+                <button class="btn btn-primary" id="connectWalletBtn">连接钱包</button>
+                <button class="btn btn-secondary hidden" id="walletAddress"></button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+        <!-- Page Navigation -->
+        <div class="page-nav">
+            <div class="page-nav-item active" data-page="deposit">
+                <span class="step-num">步骤 1</span>
+                锁定仓位
+            </div>
+            <div class="page-nav-item" data-page="liquidity">
+                <span class="step-num">步骤 2</span>
+                释放流动性
+            </div>
+            <div class="page-nav-item" data-page="strategy">
+                <span class="step-num">步骤 3</span>
+                收益管理
+            </div>
+        </div>
+
+        <!-- Page 1: Deposit -->
+        <div class="page active" id="depositPage">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">锁定您的仓位</h2>
+                        <p class="card-subtitle">存入您的 Polymarket 仓位代币以解锁流动性</p>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">您的余额</div>
+                        <div class="stat-value" id="userBalance">0.00</div>
+                        <div class="stat-change">CTF 代币</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">当前价格</div>
+                        <div class="stat-value" id="currentPrice">$0.00</div>
+                        <div class="stat-change positive" id="priceChange">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">金库 LTV</div>
+                        <div class="stat-value" id="vaultLTV">60%</div>
+                        <div class="stat-change">最大借贷能力</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">总锁仓量</div>
+                        <div class="stat-value" id="totalLocked">0</div>
+                        <div class="stat-change">在金库中</div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">选择仓位金库</label>
+                    <div class="custom-select">
+                        <div class="select-button" id="vaultSelectBtn">
+                            <span id="selectedVault">选择一个金库...</span>
+                            <span>▼</span>
+                        </div>
+                        <div class="select-options" id="vaultOptions">
+                            <div class="select-option" data-vault="YES">
+                                <strong>BTC $100k 看涨 (YES)</strong>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">Position ID: 1</div>
+                            </div>
+                            <div class="select-option" data-vault="NO">
+                                <strong>BTC $100k 看跌 (NO)</strong>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">Position ID: 2</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">锁仓数量</label>
+                    <div class="input-wrapper">
+                        <input type="number" class="form-input" id="lockAmount" placeholder="0.00" step="0.01">
+                        <button class="input-max-btn" id="maxLockBtn">最大</button>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-primary" id="approveLockBtn">
+                        1. 授权代币
+                    </button>
+                    <button class="btn btn-primary" id="depositBtn" disabled>
+                        2. 锁定仓位
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page 2: Liquidity -->
+        <div class="page" id="liquidityPage">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">释放流动性</h2>
+                        <p class="card-subtitle">选择如何使用您锁定仓位的价值</p>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">锁定抵押品</div>
+                        <div class="stat-value" id="lockedCollateral">0.00</div>
+                        <div class="stat-change">CTF 代币</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">抵押品价值</div>
+                        <div class="stat-value" id="collateralValue">$0.00</div>
+                        <div class="stat-change">当前美元价值</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">最大借款</div>
+                        <div class="stat-value" id="maxBorrow">$0.00</div>
+                        <div class="stat-change">60% LTV</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">可用流动性</div>
+                        <div class="stat-value" id="availableLiquidity">$0.00</div>
+                        <div class="stat-change">在资金池中</div>
+                    </div>
+                </div>
+
+                <div class="options-grid">
+                    <div class="option-card" data-option="self">
+                        <div class="option-header">
+                            <h3 class="option-title">自主管理</h3>
+                            <span class="option-badge">灵活</span>
+                        </div>
+                        <p class="option-description">
+                            以您的锁定仓位为抵押借入 USDC，随意使用。完全控制，完全责任。
+                        </p>
+                        <ul class="option-features">
+                            <li>您控制借入的资金</li>
+                            <li>手动健康因子管理</li>
+                            <li>随时可以还款</li>
+                            <li>当前年化利率: <strong id="borrowAPR">--</strong></li>
+                        </ul>
+                    </div>
+
+                    <div class="option-card" data-option="protocol">
+                        <div class="option-header">
+                            <h3 class="option-title">协议托管</h3>
+                            <span class="option-badge">自动</span>
+                        </div>
+                        <p class="option-description">
+                            让协议代您借款并部署到低风险 DeFi 策略。自动化收益优化。
+                        </p>
+                        <ul class="option-features">
+                            <li>自动化 DeFi 策略</li>
+                            <li>自动健康因子保护</li>
+                            <li>预期年化收益: <strong>12.5%</strong></li>
+                            <li>随时可以终止</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="selfManagedSection" class="hidden" style="margin-top: var(--spacing-lg);">
+                    <div class="card">
+                        <h3 class="card-title">借入 USDC</h3>
+                        
+                        <div class="form-group mt-2">
+                            <label class="form-label">借款金额 (USDC)</label>
+                            <div class="input-wrapper">
+                                <input type="number" class="form-input" id="borrowAmount" placeholder="0.00" step="0.01">
+                                <button class="input-max-btn" id="maxBorrowBtn">最大</button>
+                            </div>
+                        </div>
+
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" id="borrowBtn">借入 USDC</button>
+                            <button class="btn btn-danger" id="terminateSelfBtn">终止并取回</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="protocolManagedSection" class="hidden" style="margin-top: var(--spacing-lg);">
+                    <div class="card">
+                        <h3 class="card-title">启用协议托管</h3>
+                        <p class="card-subtitle">协议将自动借款并部署到 DeFi 策略中</p>
+
+                        <div class="action-buttons mt-2">
+                            <button class="btn btn-primary" id="enableProtocolBtn">启用自动策略</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page 3: Strategy -->
+        <div class="page" id="strategyPage">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">活跃仓位</h2>
+                        <p class="card-subtitle">监控您的仓位健康度和收益</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.25rem;">锁仓时长</div>
+                        <div id="depositTimer" style="font-family: var(--font-display); font-size: 1.25rem; color: var(--accent-green); font-weight: 700;">0秒</div>
+                    </div>
+                </div>
+
+                <div class="health-factor">
+                    <div class="stat-label text-center">健康因子</div>
+                    <div class="health-value safe" id="healthFactor">∞</div>
+                    <p class="text-center" style="color: var(--text-secondary); font-size: 0.875rem;">
+                        <span id="healthStatus">安全 - 无债务</span>
+                    </p>
+                    <div class="health-bar">
+                        <div class="health-bar-fill" id="healthBarFill" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">总抵押品</div>
+                        <div class="stat-value" id="totalCollateralValue">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">总债务</div>
+                        <div class="stat-value" id="totalDebt">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">可借额度</div>
+                        <div class="stat-value" id="maxBorrowAvailable">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">累计收益</div>
+                        <div class="stat-value stat-change positive" id="totalEarned">+$0.00</div>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" id="repayBtn">偿还债务</button>
+                    <button class="btn btn-danger" id="terminateBtn">终止仓位</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">交易</h3>
+                <button class="modal-close" id="modalClose">×</button>
+            </div>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
